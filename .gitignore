@@ -1,0 +1,20 @@
+# 构建产物与资源包
+dist/
+*.exe
+*.zip
+*.bundle
+*.bin
+*.hash
+*.log
+ROB_RUN汉化诊断_*.txt
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# 系统与开发临时文件
+.vs/
+.idea/
+*.suo
+*.user
