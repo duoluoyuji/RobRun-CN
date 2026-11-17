@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
-  "announcement": "v1.0.0：ROB RUN 简繁双语一键汉化与还原工具首发版本。",
+  "version": "1.2.0",
+  "announcement": "v1.2：适配 2026-11-17 游戏更新，补齐新增文本，修正部分译文。",
   "download": "https://github.com/duoluoyuji/RobRun-CN/releases/latest"
 }

@@ -18,8 +18,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCopyright("Copyright © 2026 B站@吃素的佩奇")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 namespace RobRunCN {
     public class ClientTarget {
@@ -58,7 +58,7 @@ namespace RobRunCN {
         private string toolDir;
         private string zhDir;
         private string zhTwDir;
-        private string currentVersion = "1.0";
+        private string currentVersion = "1.2";
 
         private static readonly string[] Zh0Names = new string[] {
             "inbuild_assets_all.bundle",

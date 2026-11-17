@@ -1,15 +1,22 @@
+# -*- coding: utf-8 -*-
+"""ROB RUN 汉化打包（v2）
+用法: python build_pack.py <译文CSV> <输出目录> <官方bundle目录> <字库inbuild> <locales bundle>
+说明: 把译文写入 6 个语言 StringTable；字库与 locales 用显式传入的成品文件（不再读死路径）。
+"""
 import csv, os, shutil, sys
 import UnityPy
-ROOT = r"F:\RobRun_汉化接手"
-SRC = r"E:\SteamLibrary\steamapps\common\Rob Run\ROB RUN_Data\StreamingAssets\aa\StandaloneWindows64"
-FONT_SRC = os.path.join(ROOT, "04_交付", "files")
-LOCALES_SRC = os.path.join(ROOT, "04_交付", "files", "localization-locales_assets_all.bundle")
 
-patch_file = sys.argv[1]
-out_dir = sys.argv[2]
+if len(sys.argv) < 6:
+    sys.exit("usage: build_pack.py <csv> <out_dir> <official_bundle_dir> <font_inbuild> <locales_bundle>")
+
+patch_file, out_dir, src_dir, font_inbuild, locales_bundle = sys.argv[1:6]
 os.makedirs(out_dir, exist_ok=True)
-patch = {int(r["id"]): r["zh"] for r in csv.DictReader(open(patch_file, encoding="utf-8-sig"))}
-print("patch", len(patch))
+
+patch = {}
+with open(patch_file, encoding="utf-8-sig", newline="") as f:
+    for r in csv.DictReader(f):
+        patch[int(r["id"])] = r["zh"]
+print("patch entries:", len(patch))
 
 bundles = [
     "localization-string-tables-english(unitedstates)(en-us)_assets_all.bundle",
@@ -19,28 +26,40 @@ bundles = [
     "localization-string-tables-russian(russia)(ru-ru)_assets_all.bundle",
     "localization-string-tables-spanish(es)_assets_all.bundle",
 ]
+
+total_rows = 0
 for b in bundles:
-    env = UnityPy.load(os.path.join(SRC, b))
+    src = os.path.join(src_dir, b)
+    if not os.path.exists(src):
+        sys.exit("missing official bundle: " + src)
+    env = UnityPy.load(src)
     n = 0
+    rows = 0
     for obj in env.objects:
-        if obj.type.name != "MonoBehaviour": continue
+        if obj.type.name != "MonoBehaviour":
+            continue
         t = obj.read_typetree()
-        if "m_TableData" not in t: continue
+        if "m_TableData" not in t:
+            continue
         for item in t["m_TableData"]:
+            rows += 1
             v = patch.get(int(item["m_Id"]))
             if v is not None:
-                item["m_Localized"] = v; n += 1
+                item["m_Localized"] = v.replace("\\n", "\n")
+                n += 1
         obj.save_typetree(t)
-    with open(os.path.join(out_dir, b), "wb") as f:
+    out = os.path.join(out_dir, b)
+    with open(out, "wb") as f:
         f.write(env.file.save(packer="lz4"))
-    print("built", b[:46], n)
+    total_rows += rows
+    print("built %-58s rows=%d patched=%d size=%d" % (b[:58], rows, n, os.path.getsize(out)))
 
-for extra in ("inbuild_assets_all.bundle", "localization-locales_assets_all.bundle"):
-    target = os.path.join(out_dir, extra)
-    if os.path.exists(target):
-        print("preserving existing", extra)
-        continue
-    src = os.path.join(FONT_SRC, extra)
-    if os.path.exists(src):
-        shutil.copy2(src, target)
-print("done ->", out_dir)
+for name, srcfile in [("inbuild_assets_all.bundle", font_inbuild),
+                      ("localization-locales_assets_all.bundle", locales_bundle)]:
+    dst = os.path.join(out_dir, name)
+    if not os.path.exists(srcfile):
+        sys.exit("missing asset: " + srcfile)
+    shutil.copy2(srcfile, dst)
+    print("copied %-42s %d" % (name, os.path.getsize(dst)))
+
+print("done ->", out_dir, "rows_total=", total_rows)

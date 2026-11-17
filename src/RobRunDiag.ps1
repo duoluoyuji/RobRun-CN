@@ -13,7 +13,7 @@ $script:rep = New-Object System.Collections.Generic.List[string]
 function Log-Line([string]$s) { $script:rep.Add($s); Write-Host $s }
 
 Log-Line "=========================================================="
-Log-Line ("  ROB RUN 简繁双语汉化一键诊断报告 v1.0 (" + $stamp + ")")
+Log-Line ("  ROB RUN 简繁双语汉化一键诊断报告 v1.2 (" + $stamp + ")")
 Log-Line "=========================================================="
 Log-Line ""
 
