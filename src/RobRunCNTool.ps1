@@ -1,6 +1,6 @@
 ﻿
 # -*- coding: utf-8 -*-
-# ROB RUN 简繁双语一键汉化与还原工具 v1.0
+# ROB RUN 简繁双语一键汉化与还原工具 v1.1
 # 制作: B站@吃素的佩奇 (https://space.bilibili.com/3379443)
 
 param(
@@ -177,7 +177,7 @@ function Ensure-GameClosed {
 # ==================== 专属定制免责声明弹窗 ====================
 function Show-Disclaimer {
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "ROB RUN 汉化工具 - 制作: B站@吃素的佩奇"
+    $form.Text = "ROB RUN 汉化工具 v1.1 - 制作: B站@吃素的佩奇"
     $form.Size = New-Object System.Drawing.Size(580, 480)
     $form.StartPosition = 'CenterScreen'
     $form.FormBorderStyle = 'FixedDialog'
@@ -330,7 +330,7 @@ function Show-Disclaimer {
 # ================= 命令行模式 =================
 if ($Install -or $Restore) {
     Write-Host "==========================================================" -ForegroundColor Cyan
-    Write-Host "       ROB RUN 简繁双语一键汉化工具 v1.0" -ForegroundColor Cyan
+    Write-Host "       ROB RUN 简繁双语一键汉化工具 v1.1" -ForegroundColor Cyan
     Write-Host "       制作团队: B站@吃素的佩奇" -ForegroundColor Magenta
     Write-Host "       主页: https://space.bilibili.com/3379443" -ForegroundColor Gray
     Write-Host "==========================================================" -ForegroundColor Cyan

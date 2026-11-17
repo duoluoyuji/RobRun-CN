@@ -7,8 +7,8 @@ $SuiteDir = $PSScriptRoot
 $Root     = Split-Path (Split-Path $SuiteDir -Parent) -Parent  # F:\RobRun_汉化接手
 $ZhSrc    = Join-Path $Root '04_交付\pack_zh'
 $TwSrc    = Join-Path $Root '04_交付\pack_tw'
-$Dist     = Join-Path $Root '04_交付\ROB_RUN_汉化工具_v1.0'
-$ZipOut   = Join-Path $Root '04_交付\ROB_RUN_汉化工具_v1.0.zip'
+$Dist     = Join-Path $Root '04_交付\ROB_RUN_汉化工具_v1.1'
+$ZipOut   = Join-Path $Root '04_交付\ROB_RUN_汉化工具_v1.1.zip'
 
 $Csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $Csc)) { throw "未找到 csc.exe: $Csc" }
