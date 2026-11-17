@@ -438,15 +438,16 @@ namespace RobRunCN {
 
         private string GetClientState(string root) {
             string aa = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\StandaloneWindows64");
-            string inbuildZh = Path.Combine(aa, "inbuild_assets_zh0.bundle");
-            if (!File.Exists(inbuildZh)) {
+            string inbuildBak = Path.Combine(aa, "inbuild_assets_all.bundle.bak_official");
+            string inbuildZh0 = Path.Combine(aa, "inbuild_assets_zh0.bundle");
+            if (!File.Exists(inbuildBak) && !File.Exists(inbuildZh0)) {
                 return "未安装 (官方原版)";
             }
 
-            string localesZh = Path.Combine(aa, "localization-locales_assets_zh0.bundle");
-            if (File.Exists(localesZh)) {
+            string locales = Path.Combine(aa, "localization-locales_assets_all.bundle");
+            if (File.Exists(locales)) {
                 try {
-                    byte[] data = File.ReadAllBytes(localesZh);
+                    byte[] data = File.ReadAllBytes(locales);
                     string str = Encoding.UTF8.GetString(data);
                     if (str.Contains("zh-TW") || str.Contains("繁體中文")) {
                         return "已安装【繁体中文】";
@@ -601,7 +602,7 @@ namespace RobRunCN {
             if (!EnsureGameClosed()) return;
 
             AppendLog("==========================================================");
-            AppendLog(">>> 开始执行【" + langTitle + "】汉化安装流程...");
+            AppendLog(">>> 开始执行【" + langTitle + "】汉化安装流程 (EAC 兼容模式)...");
 
             int success = 0;
             foreach (string root in targets) {
@@ -610,17 +611,47 @@ namespace RobRunCN {
                     string aa = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\StandaloneWindows64");
                     if (!Directory.Exists(aa)) Directory.CreateDirectory(aa);
 
+                    // 1. 确保主目录 catalog.bin 为官方原版（防止被历史版本修改触发 EAC 校验）
+                    string masterBin = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\catalog.bin");
+                    string masterBak = masterBin + ".bak";
+                    if (File.Exists(masterBak)) {
+                        File.Copy(masterBak, masterBin, true);
+                        AppendLog("  确保官方主 catalog.bin 完整性 (保持 EAC 反作弊兼容)");
+                    }
+
+                    // 2. 清理历史旧版 _zh0.bundle 载荷
+                    foreach (var n in Zh0Names) {
+                        string oldZh0 = Path.Combine(aa, n.Replace("_all.bundle", "_zh0.bundle"));
+                        if (File.Exists(oldZh0)) {
+                            try { File.Delete(oldZh0); } catch {}
+                        }
+                    }
+
+                    // 3. 部署汉化 bundle 并安全备份官方原版 bundle
                     foreach (var n in Zh0Names) {
                         string src = Path.Combine(sourceDir, n);
                         if (!File.Exists(src)) {
                             throw new FileNotFoundException("汉化资源包缺失: " + src);
                         }
-                        string dst = Path.Combine(aa, n.Replace("_all.bundle", "_zh0.bundle"));
+                        string dst = Path.Combine(aa, n);
+                        string bak = dst + ".bak_official";
+                        if (!File.Exists(bak) && File.Exists(dst)) {
+                            File.Copy(dst, bak, true);
+                            AppendLog("  已备份官方原版: " + Path.GetFileName(dst));
+                        }
                         File.Copy(src, dst, true);
-                        AppendLog("  已写入: " + Path.GetFileName(dst) + " (" + new FileInfo(dst).Length + " 字节)");
+                        AppendLog("  已应用汉化: " + Path.GetFileName(dst) + " (" + new FileInfo(dst).Length + " 字节)");
                     }
 
-                    ApplyCatalogRedirect(root);
+                    // 4. 清理运行时缓存
+                    string cache = GetCacheDir();
+                    if (Directory.Exists(cache)) {
+                        try {
+                            Directory.Delete(cache, true);
+                            AppendLog("  已清理运行时缓存");
+                        } catch {}
+                    }
+
                     success++;
                     AppendLog("【成功】" + langTitle + " 已成功部署至: " + root);
                 } catch (Exception ex) {
@@ -652,14 +683,23 @@ namespace RobRunCN {
             foreach (string root in targets) {
                 try {
                     string aa = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\StandaloneWindows64");
+
+                    // 1. 还原 8 个 bundle 官方原版
                     foreach (var n in Zh0Names) {
-                        string z = Path.Combine(aa, n.Replace("_all.bundle", "_zh0.bundle"));
-                        if (File.Exists(z)) {
-                            File.Delete(z);
-                            AppendLog("  已清理汉化载荷: " + Path.GetFileName(z));
+                        string dst = Path.Combine(aa, n);
+                        string bak = dst + ".bak_official";
+                        if (File.Exists(bak)) {
+                            File.Copy(bak, dst, true);
+                            try { File.Delete(bak); } catch {}
+                            AppendLog("  已还原官方资源包: " + Path.GetFileName(dst));
+                        }
+                        string oldZh0 = Path.Combine(aa, n.Replace("_all.bundle", "_zh0.bundle"));
+                        if (File.Exists(oldZh0)) {
+                            try { File.Delete(oldZh0); } catch {}
                         }
                     }
 
+                    // 2. 还原官方主 catalog.bin
                     string masterBin = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\catalog.bin");
                     string masterBak = masterBin + ".bak";
                     if (File.Exists(masterBak)) {
@@ -667,6 +707,7 @@ namespace RobRunCN {
                         AppendLog("  已还原官方主 catalog.bin");
                     }
 
+                    // 3. 清理运行时缓存
                     string cache = GetCacheDir();
                     if (Directory.Exists(cache)) {
                         try {

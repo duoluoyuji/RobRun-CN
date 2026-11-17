@@ -348,17 +348,23 @@ if ($Install -or $Restore) {
     if ($Restore) {
         Write-Log "正在执行一键还原官方原版英文..." "Yellow"
         foreach ($n in $Zh0Names) {
-            $z = Join-Path $aa ($n.Replace('_all.bundle', '_zh0.bundle'))
-            if (Test-Path $z) {
-                Remove-Item -LiteralPath $z -Force
-                Write-Log ("已清理: " + [System.IO.Path]::GetFileName($z)) "Gray"
+            $dst = Join-Path $aa $n
+            $bak = $dst + '.bak_official'
+            if (Test-Path $bak) {
+                Copy-Item -LiteralPath $bak -Destination $dst -Force
+                Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
+                Write-Log ("已还原官方资源包: " + [System.IO.Path]::GetFileName($dst)) "Gray"
+            }
+            $oldZh0 = Join-Path $aa ($n.Replace('_all.bundle', '_zh0.bundle'))
+            if (Test-Path $oldZh0) {
+                Remove-Item -LiteralPath $oldZh0 -Force -ErrorAction SilentlyContinue
             }
         }
         $masterBin = Join-Path $game 'ROB RUN_Data\StreamingAssets\aa\catalog.bin'
         $masterBak = $masterBin + '.bak'
         if (Test-Path $masterBak) {
             Copy-Item -LiteralPath $masterBak -Destination $masterBin -Force
-            Write-Log "已还原官方主 catalog.bin" "Green"
+            Write-Log "已还原官方主 catalog.bin (EAC 兼容)" "Green"
         }
         $cache = Get-CacheDir
         if (Test-Path $cache) {
@@ -381,20 +387,46 @@ if ($Install -or $Restore) {
         }
 
         Write-Host ""
-        Write-Log ("正在安装【" + $langTitle + "】汉化包...") "Yellow"
+        Write-Log ("正在安装【" + $langTitle + "】汉化包 (EAC 兼容模式)...") "Yellow"
         if (-not (Test-Path $sourceDir)) { throw ("缺少汉化资源包目录: " + $sourceDir) }
         if (-not (Test-Path $aa)) { New-Item -ItemType Directory -Path $aa -Force | Out-Null }
 
+        # 确保 catalog.bin 为官方原版
+        $masterBin = Join-Path $game 'ROB RUN_Data\StreamingAssets\aa\catalog.bin'
+        $masterBak = $masterBin + '.bak'
+        if (Test-Path $masterBak) {
+            Copy-Item -LiteralPath $masterBak -Destination $masterBin -Force
+            Write-Log "确保官方主 catalog.bin 完整性 (保持 EAC 反作弊兼容)" "Cyan"
+        }
+
+        # 清理旧版 _zh0.bundle 载荷
+        foreach ($n in $Zh0Names) {
+            $oldZh0 = Join-Path $aa ($n.Replace('_all.bundle', '_zh0.bundle'))
+            if (Test-Path $oldZh0) {
+                Remove-Item -LiteralPath $oldZh0 -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # 部署并备份
         foreach ($n in $Zh0Names) {
             $src = Join-Path $sourceDir $n
             if (-not (Test-Path $src)) { throw ("资源包缺失: " + $src) }
-            $dst = Join-Path $aa ($n.Replace('_all.bundle', '_zh0.bundle'))
+            $dst = Join-Path $aa $n
+            $bak = $dst + '.bak_official'
+            if ((-not (Test-Path $bak)) -and (Test-Path $dst)) {
+                Copy-Item -LiteralPath $dst -Destination $bak -Force
+                Write-Log ("已备份官方原版: " + [System.IO.Path]::GetFileName($dst)) "Gray"
+            }
             Copy-Item -LiteralPath $src -Destination $dst -Force
             $fileLen = (Get-Item $dst).Length
-            Write-Log ("已写入: " + [System.IO.Path]::GetFileName($dst) + " (" + $fileLen + " 字节)") "Gray"
+            Write-Log ("已应用汉化: " + [System.IO.Path]::GetFileName($dst) + " (" + $fileLen + " 字节)") "Gray"
         }
 
-        Apply-CatalogRedirect $game
+        $cache = Get-CacheDir
+        if (Test-Path $cache) {
+            Remove-Item -LiteralPath $cache -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Log "已清理运行时缓存" "Gray"
+        }
 
         Write-Host ""
         Write-Host "==========================================================" -ForegroundColor Green
