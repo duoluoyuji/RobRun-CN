@@ -114,13 +114,18 @@ function Apply-CatalogRedirect([string]$g) {
 
     if (-not (Test-Path $masterBin)) { throw ("找不到主 catalog.bin: " + $masterBin) }
 
-    if (-not (Test-Path $masterBak)) {
-        Copy-Item -LiteralPath $masterBin -Destination $masterBak -Force
-        Write-Log "已备份官方原版 catalog -> catalog.bin.bak" "Cyan"
+    [byte[]]$currentBin = [System.IO.File]::ReadAllBytes($masterBin)
+    $enc = [System.Text.Encoding]::ASCII
+    $isRedirected = $enc.GetString($currentBin).Contains('_zh0.bundle')
+
+    if (-not $isRedirected) {
+        if ((-not (Test-Path $masterBak)) -or ($currentBin.Length -ne (Get-Item $masterBak).Length) -or ((Get-Item $masterBin).LastWriteTimeUtc -gt (Get-Item $masterBak).LastWriteTimeUtc)) {
+            Copy-Item -LiteralPath $masterBin -Destination $masterBak -Force
+            Write-Log "检测到官方 catalog.bin 更新，已同步备份 -> catalog.bin.bak" "Cyan"
+        }
     }
 
-    [byte[]]$data = [System.IO.File]::ReadAllBytes($masterBak)
-    $enc = [System.Text.Encoding]::ASCII
+    [byte[]]$data = if (Test-Path $masterBak) { [System.IO.File]::ReadAllBytes($masterBak) } else { $currentBin }
     foreach ($n in $Zh0Names) {
         $z = $n.Replace('_all.bundle', '_zh0.bundle')
         [byte[]]$find = $enc.GetBytes($n)

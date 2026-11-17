@@ -29,7 +29,7 @@ for b in bundles:
         for item in t["m_TableData"]:
             v = patch.get(int(item["m_Id"]))
             if v is not None:
-                item["m_Localized"] = v; n += 1
+                item["m_Localized"] = v.replace("\\n", "\n"); n += 1
         obj.save_typetree(t)
     with open(os.path.join(out_dir, b), "wb") as f:
         f.write(env.file.save(packer="lz4"))

@@ -82,7 +82,7 @@ namespace RobRunCN {
 
         private void InitializeComponent() {
             this.Text = "ROB RUN 简繁双语一键汉化工具 v" + currentVersion + " - 制作: B站@吃素的佩奇";
-            this.ClientSize = new Size(745, 725);
+            this.ClientSize = new Size(745, 735);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
@@ -175,7 +175,7 @@ namespace RobRunCN {
             grpActions = new GroupBox();
             grpActions.Text = " 免责声明与操作面板 ";
             grpActions.Location = new Point(20, 240);
-            grpActions.Size = new Size(705, 218);
+            grpActions.Size = new Size(705, 230);
             grpActions.ForeColor = Color.FromArgb(31, 41, 55);
             grpActions.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
 
@@ -184,16 +184,16 @@ namespace RobRunCN {
             lblDiscText.Font = new Font("Microsoft YaHei UI", 9.0f);
             lblDiscText.ForeColor = Color.FromArgb(120, 53, 15);
             lblDiscText.BackColor = Color.FromArgb(254, 243, 199);
-            lblDiscText.Location = new Point(15, 24);
-            lblDiscText.Size = new Size(675, 78);
+            lblDiscText.Location = new Point(15, 22);
+            lblDiscText.Size = new Size(675, 96);
             lblDiscText.Padding = new Padding(8, 6, 8, 6);
 
             chkAgree = new CheckBox();
             chkAgree.Text = "我已知晓并自愿承担汉化修改可能带来的一切风险";
             chkAgree.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
             chkAgree.ForeColor = Color.FromArgb(185, 28, 28);
-            chkAgree.Location = new Point(15, 108);
-            chkAgree.Size = new Size(675, 28);
+            chkAgree.Location = new Point(15, 124);
+            chkAgree.Size = new Size(675, 26);
             chkAgree.AutoSize = false;
             chkAgree.CheckedChanged += (s, e) => {
                 bool ok = chkAgree.Checked;
@@ -209,7 +209,7 @@ namespace RobRunCN {
             // 简体安装按钮
             btnInstallZh = new Button();
             btnInstallZh.Text = "一键应用【简体中文】";
-            btnInstallZh.Location = new Point(15, 144);
+            btnInstallZh.Location = new Point(15, 158);
             btnInstallZh.Size = new Size(215, 56);
             btnInstallZh.BackColor = Color.FromArgb(229, 231, 235);
             btnInstallZh.ForeColor = Color.FromArgb(156, 163, 175);
@@ -223,7 +223,7 @@ namespace RobRunCN {
             // 繁体安装按钮
             btnInstallTw = new Button();
             btnInstallTw.Text = "一键应用【繁体中文】";
-            btnInstallTw.Location = new Point(245, 144);
+            btnInstallTw.Location = new Point(245, 158);
             btnInstallTw.Size = new Size(215, 56);
             btnInstallTw.BackColor = Color.FromArgb(229, 231, 235);
             btnInstallTw.ForeColor = Color.FromArgb(156, 163, 175);
@@ -237,7 +237,7 @@ namespace RobRunCN {
             // 还原按钮（随时可用，无需勾选协议）
             btnRestore = new Button();
             btnRestore.Text = "一键还原官方英文";
-            btnRestore.Location = new Point(475, 144);
+            btnRestore.Location = new Point(475, 158);
             btnRestore.Size = new Size(215, 56);
             btnRestore.BackColor = Color.FromArgb(220, 38, 38);
             btnRestore.ForeColor = Color.White;
@@ -258,7 +258,7 @@ namespace RobRunCN {
             // ================= 实时日志区域 =================
             grpLog = new GroupBox();
             grpLog.Text = " 实时日志与状态显示 ";
-            grpLog.Location = new Point(20, 468);
+            grpLog.Location = new Point(20, 480);
             grpLog.Size = new Size(705, 235);
             grpLog.ForeColor = Color.FromArgb(31, 41, 55);
             grpLog.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
@@ -484,6 +484,20 @@ namespace RobRunCN {
             return true;
         }
 
+        private bool ContainsBytes(byte[] src, byte[] search) {
+            int n = src.Length;
+            int m = search.Length;
+            if (m == 0 || n < m) return false;
+            for (int i = 0; i <= n - m; i++) {
+                bool match = true;
+                for (int j = 0; j < m; j++) {
+                    if (src[i + j] != search[j]) { match = false; break; }
+                }
+                if (match) return true;
+            }
+            return false;
+        }
+
         private byte[] ReplaceBytes(byte[] src, byte[] search, byte[] repl) {
             var dst = new List<byte>(src.Length);
             int n = src.Length;
@@ -522,13 +536,21 @@ namespace RobRunCN {
                 throw new FileNotFoundException("找不到主 catalog.bin: " + masterBin);
             }
 
-            if (!File.Exists(masterBak)) {
-                File.Copy(masterBin, masterBak, true);
-                AppendLog("-> 已备份官方原版 catalog: " + Path.GetFileName(masterBak));
+            Encoding ascii = Encoding.ASCII;
+            byte[] currentBin = File.ReadAllBytes(masterBin);
+            bool isRedirected = ContainsBytes(currentBin, ascii.GetBytes("_zh0.bundle"));
+
+            if (!isRedirected) {
+                // 当前 catalog.bin 为纯净官方原版，若备份不存在或官方文件更新，则自动同步备份
+                if (!File.Exists(masterBak) || currentBin.Length != new FileInfo(masterBak).Length || File.GetLastWriteTimeUtc(masterBin) > File.GetLastWriteTimeUtc(masterBak)) {
+                    File.Copy(masterBin, masterBak, true);
+                    AppendLog("-> 检测到官方 catalog.bin 更新，已同步备份: " + Path.GetFileName(masterBak));
+                }
+            } else if (!File.Exists(masterBak)) {
+                AppendLog("[!] 提示: 主 catalog 已处于汉化状态且无备份");
             }
 
-            byte[] data = File.ReadAllBytes(masterBak);
-            Encoding ascii = Encoding.ASCII;
+            byte[] data = File.Exists(masterBak) ? File.ReadAllBytes(masterBak) : currentBin;
             foreach (var n in Zh0Names) {
                 string z = n.Replace("_all.bundle", "_zh0.bundle");
                 data = ReplaceBytes(data, ascii.GetBytes(n), ascii.GetBytes(z));
