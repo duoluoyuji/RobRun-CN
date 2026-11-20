@@ -84,7 +84,7 @@ namespace RobRunCN {
         }
 
         private void InitializeComponent() {
-            this.Text = "ROB RUN 简繁双语一键汉化工具 v" + currentVersion + " - 制作: B站@吃素的佩奇";
+            this.Text = "ROB RUN 简繁双语一键汉化工具 v" + currentVersion;
             this.ClientSize = new Size(745, 725);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -108,10 +108,8 @@ namespace RobRunCN {
             lblTitle.AutoSize = true;
 
             lblSubTitle = new Label();
-            lblSubTitle.Text = "制作: B站@吃素的佩奇";
-            lblSubTitle.Font = new Font("Microsoft YaHei UI", 9.5f);
-            lblSubTitle.ForeColor = Color.FromArgb(107, 114, 128);
-            lblSubTitle.Location = new Point(22, 45);
+            lblSubTitle.Text = "";
+            lblSubTitle.Visible = false;
             lblSubTitle.AutoSize = true;
 
             lblUpdate = new Label();
@@ -142,7 +140,6 @@ namespace RobRunCN {
             };
 
             topPanel.Controls.Add(lblTitle);
-            topPanel.Controls.Add(lblSubTitle);
             topPanel.Controls.Add(lblUpdate);
             topPanel.Controls.Add(btnBili);
             this.Controls.Add(topPanel);
@@ -298,6 +295,7 @@ namespace RobRunCN {
                 AppendLog("  ROB RUN 简繁双语一键汉化工具 v" + currentVersion + " 已就绪");
                 AppendLog("==========================================================");
                 RunScan();
+                AutoHealStaleCache();
                 CheckUpdateAsync();
             };
         }
@@ -581,6 +579,80 @@ namespace RobRunCN {
             return Path.Combine(localLow, @"Kefir\ROB RUN\com.unity.addressables");
         }
 
+        // 缓存是否“脏”的判定（内容级，不看大小、不猜文件名）：
+        //   把缓存里的 _zh0 反向还原成 _all 后，必须与安装目录 catalog.bin 逐字节相同。
+        //   · 我们自己的汉化缓存：反向还原后与官方完全一致 → 有效，不动
+        //   · 游戏更新后残留的旧缓存：内容不同 → 失效 → 只把缓存目录改名备份（不删游戏文件）
+        //   判定不了（没有 catalog.bin、没有缓存、没有 catalog_*.bin）→ 什么都不做
+        private static byte[] ReplaceBytesStatic(byte[] src, byte[] search, byte[] repl) {
+            var dst = new List<byte>(src.Length);
+            int i = 0, n = src.Length, m = search.Length;
+            while (i < n) {
+                bool match = m > 0 && i + m <= n;
+                if (match) for (int j = 0; j < m; j++) if (src[i + j] != search[j]) { match = false; break; }
+                if (match) { dst.AddRange(repl); i += m; } else { dst.Add(src[i]); i++; }
+            }
+            return dst.ToArray();
+        }
+
+        private static byte[] UnpatchZh0(byte[] data) {
+            return ReplaceBytesStatic(data, Encoding.ASCII.GetBytes("_zh0.bundle"), Encoding.ASCII.GetBytes("_all.bundle"));
+        }
+
+        private static bool SameBytes(byte[] a, byte[] b) {
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+            return true;
+        }
+
+        private void AutoHealStaleCache() {
+            try {
+                foreach (var t in ScanAllGameRoots()) {
+                    string aa = Path.Combine(t.Path, @"ROB RUN_Data\StreamingAssets\aa");
+                    string master = Path.Combine(aa, "catalog.bin");
+                    string cache = GetCacheDir();
+                    if (!File.Exists(master) || !Directory.Exists(cache)) continue;
+                    byte[] official = File.ReadAllBytes(master);
+                    var cands = Directory.GetFiles(cache, "catalog_*.bin");
+                    if (cands.Length == 0) continue;
+                    bool stale = false;
+                    foreach (var cf in cands) {
+                        byte[] c = File.ReadAllBytes(cf);
+                        if (!SameBytes(UnpatchZh0(c), official)) { stale = true; break; }
+                    }
+                    if (stale) {
+                        ResetCacheDir("启动自检：缓存目录与当前游戏版本不一致");
+                        AppendLog("已自动修复旧缓存（仅改名备份，未删除任何文件）");
+                        // 若已装汉化，顺手把缓存重建为“指向汉化的正确缓存”，避免修复后变回英文
+                        string zh0Sample = Path.Combine(t.Path, @"ROB RUN_Data\StreamingAssets\aa\StandaloneWindows64\inbuild_assets_zh0.bundle");
+                        if (File.Exists(zh0Sample)) {
+                            ApplyCatalogRedirect(t.Path);
+                            AppendLog("已重建汉化用缓存 catalog，中文保持不变");
+                        }
+                    }
+                }
+            } catch {}
+        }
+
+        private void ResetCacheDir(string reason) {
+            try {
+                string cache = GetCacheDir();
+                if (!Directory.Exists(cache)) return;
+                string stamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+                string parent = Path.GetDirectoryName(cache.TrimEnd('\\'));
+                string name = Path.GetFileName(cache.TrimEnd('\\'));
+                try {
+                    Directory.Move(cache, Path.Combine(parent, name + ".bak_" + stamp));
+                    AppendLog("-> 已把旧的运行时缓存改名备份（" + reason + "）");
+                } catch {
+                    Directory.Delete(cache, true);
+                    AppendLog("-> 已清理旧的运行时缓存（" + reason + "）");
+                }
+            } catch (Exception ex) {
+                AppendLog("【提示】清理缓存时出现问题（可忽略）: " + ex.Message);
+            }
+        }
+
         private string GetCatalogName(string root) {
             try {
                 string settings = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\settings.json");
@@ -631,7 +703,19 @@ namespace RobRunCN {
             }
             File.WriteAllBytes(cacheBin, data);
             if (File.Exists(masterHash)) File.Copy(masterHash, cacheHash, true);
-            AppendLog("-> 已改写用户缓存 catalog (" + catName + ")，重定向 " + hits + "/8 个资源包；安装目录文件未改动");
+            AppendLog("[成功] 已把 " + hits + "/8 处包名指向 *_zh0.bundle");
+            string hashText = "";
+            try { if (File.Exists(cacheHash)) hashText = File.ReadAllText(cacheHash); } catch {}
+            AppendLog("[成功] 已写入缓存 catalog 哈希（" + hashText + "）");
+            try {
+                foreach (var cf in Directory.GetFiles(cache, "catalog_*.bin")) {
+                    if (cf == cacheBin) continue;
+                    File.WriteAllBytes(cf, data);
+                    string h2 = Path.ChangeExtension(cf, ".hash");
+                    if (File.Exists(masterHash)) File.Copy(masterHash, h2, true);
+                    AppendLog("已同步缓存副本: " + Path.GetFileName(cf));
+                }
+            } catch {}
         }
 
         private void ExecuteInstall(string langCode, string langTitle, string sourceDir) {
@@ -647,6 +731,9 @@ namespace RobRunCN {
             }
 
             if (!EnsureGameClosed()) return;
+
+            // 安装前清掉旧缓存，避免“旧 bin + 新 hash”导致 E-0124
+            ResetCacheDir("安装前清理旧缓存");
 
             AppendLog("==========================================================");
             AppendLog(">>> 开始执行【" + langTitle + "】汉化安装流程...");
@@ -692,6 +779,8 @@ namespace RobRunCN {
             }
 
             if (!EnsureGameClosed()) return;
+
+            ResetCacheDir("还原官方原版");
 
             AppendLog("==========================================================");
             AppendLog(">>> 正在执行一键还原官方原版英文...");

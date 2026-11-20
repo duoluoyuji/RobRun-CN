@@ -6,7 +6,8 @@
 param(
     [switch]$Install,
     [switch]$Restore,
-    [string]$Lang = ""
+    [string]$Lang = "",
+    [switch]$Repair
 )
 
 $ErrorActionPreference = 'Stop'
@@ -107,6 +108,22 @@ function Replace-Bytes([byte[]]$data, [byte[]]$find, [byte[]]$repl) {
     return ,$out.ToArray()
 }
 
+# 把用户缓存目录整体改名备份，避免“旧的 catalog.bin + 新的 .hash”导致 E-0124 / 资源找不到
+function Reset-CacheDir([string]$reason) {
+    $cache = Get-CacheDir
+    if (Test-Path $cache) {
+        $stamp = (Get-Date).ToString('yyyyMMddHHmmss')
+        $bak = $cache + '.bak_' + $stamp
+        try {
+            Rename-Item -LiteralPath $cache -NewName ('com.unity.addressables.bak_' + $stamp) -ErrorAction Stop
+            Write-Log ('已把旧的运行时缓存改名备份 -> ' + (Split-Path $bak -Leaf) + '（' + $reason + '）') 'Cyan'
+        } catch {
+            Remove-Item -LiteralPath $cache -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Log ('已清理旧的运行时缓存（' + $reason + '）') 'Cyan'
+        }
+    }
+}
+
 function Get-CatalogName([string]$g) {
     $settings = Join-Path $g 'ROB RUN_Data\StreamingAssets\aa\settings.json'
     if (Test-Path $settings) {
@@ -151,7 +168,20 @@ function Apply-CatalogRedirect([string]$g) {
     }
     [System.IO.File]::WriteAllBytes($cacheBin, $data)
     if (Test-Path $masterHash) { Copy-Item -LiteralPath $masterHash -Destination $cacheHash -Force }
-    Write-Log ('已改写用户缓存 catalog (' + $catName + ')，重定向 ' + $hits + '/8 个资源包；安装目录文件未改动') 'Green'
+    Write-Log ('[成功] 已把 ' + $hits + '/8 处包名指向 *_zh0.bundle') 'Green'
+    $hashText = ''
+    if (Test-Path $cacheHash) { $hashText = [System.IO.File]::ReadAllText($cacheHash) }
+    Write-Log ('[成功] 已写入缓存 catalog 哈希（' + $hashText + '）') 'Green'
+
+    # 兜底：把缓存里其它 catalog_*.bin 也一并改写，避免版本名不一致导致失效
+    foreach ($cf in (Get-ChildItem -LiteralPath $cache -Filter 'catalog_*.bin' -ErrorAction SilentlyContinue)) {
+        if ($cf.FullName -ne $cacheBin) {
+            [System.IO.File]::WriteAllBytes($cf.FullName, $data)
+            $h2 = [System.IO.Path]::ChangeExtension($cf.FullName, '.hash')
+            if (Test-Path $masterHash) { Copy-Item -LiteralPath $masterHash -Destination $h2 -Force }
+            Write-Log ('已同步缓存副本: ' + $cf.Name) 'Gray'
+        }
+    }
 }
 
 function Ensure-GameClosed {
@@ -323,7 +353,7 @@ function Show-Disclaimer {
 }
 
 # ================= 命令行模式 =================
-if ($Install -or $Restore) {
+if ($Install -or $Restore -or $Repair) {
     Write-Host "==========================================================" -ForegroundColor Cyan
     Write-Host "       ROB RUN 简繁双语一键汉化工具 v1.3" -ForegroundColor Cyan
     Write-Host "       制作团队: B站@吃素的佩奇" -ForegroundColor Magenta
@@ -351,22 +381,19 @@ if ($Install -or $Restore) {
         }
         $masterBin = Join-Path $game 'ROB RUN_Data\StreamingAssets\aa\catalog.bin'
         $masterHash = Join-Path $game 'ROB RUN_Data\StreamingAssets\aa\catalog.hash'
-        # 恢复用户缓存 catalog 为官方版本（不改安装目录文件）
-        $cache = Get-CacheDir
-        if (Test-Path $cache) {
-            $catName = Get-CatalogName $game
-            $cacheBin = Join-Path $cache ($catName + '.bin')
-            if ((Test-Path $masterBin) -and (Test-Path $cacheBin)) {
-                Copy-Item -LiteralPath $masterBin -Destination $cacheBin -Force
-                Write-Log '已把用户缓存 catalog 还原为官方版本' 'Green'
-            }
-            $cacheHash = Join-Path $cache ($catName + '.hash')
-            if ((Test-Path $masterHash) -and (Test-Path $cacheHash)) {
-                Copy-Item -LiteralPath $masterHash -Destination $cacheHash -Force
-            }
-        }
+        # 直接把运行时缓存整体改名备份，游戏会回退到安装目录里的官方 catalog
+        Reset-CacheDir '还原官方原版'
+        Write-Log '已把用户缓存 catalog 还原为官方版本' 'Green'
         Write-Host ""
         Write-Host "【成功】已完全还原官方原版英文！直接启动游戏即可。" -ForegroundColor Green
+        exit 0
+    }
+
+    if ($Repair) {
+        Write-Log '正在处理启动报错（E-0124 / 资源加载失败）...' 'Yellow'
+        Reset-CacheDir '手动修复'
+        Write-Host ''
+        Write-Host '【成功】已清理旧的运行时缓存。现在启动游戏即可（若已装汉化，中文仍在）。' -ForegroundColor Green
         exit 0
     }
 
@@ -381,6 +408,7 @@ if ($Install -or $Restore) {
         }
 
         Write-Host ""
+        Reset-CacheDir '安装前清理旧缓存'
         Write-Log ("正在安装【" + $langTitle + "】汉化包...") "Yellow"
         if (-not (Test-Path $sourceDir)) { throw ("缺少汉化资源包目录: " + $sourceDir) }
         if (-not (Test-Path $aa)) { New-Item -ItemType Directory -Path $aa -Force | Out-Null }
