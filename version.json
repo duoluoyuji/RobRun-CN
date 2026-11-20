@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
-  "announcement": "v1.3：适配 2026-11-20 游戏更新（4,947 条），新增 118 条汉化，通行证更名为战斗通行证。",
+  "version": "1.2.0",
+  "announcement": "v1.2：适配 2026-11-17 游戏更新，补齐新增文本，修正部分译文。（v1.3 测试中，暂未发布）",
   "download": "https://github.com/duoluoyuji/RobRun-CN/releases/latest"
 }
