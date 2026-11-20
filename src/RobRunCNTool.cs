@@ -581,55 +581,57 @@ namespace RobRunCN {
             return Path.Combine(localLow, @"Kefir\ROB RUN\com.unity.addressables");
         }
 
+        private string GetCatalogName(string root) {
+            try {
+                string settings = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\settings.json");
+                if (File.Exists(settings)) {
+                    string txt = File.ReadAllText(settings, Encoding.UTF8);
+                    var ms = Regex.Matches(txt, "catalog_[0-9][0-9\\.]+");
+                    var cands = new List<string>();
+                    foreach (Match m in ms) {
+                        string v = m.Value.TrimEnd('.');
+                        if (v.Split('.').Length - 1 >= 3) cands.Add(v);
+                    }
+                    if (cands.Count > 0) {
+                        cands.Sort((a, b) => b.Length.CompareTo(a.Length));
+                        return cands[0];
+                    }
+                }
+            } catch {}
+            try {
+                string cache = GetCacheDir();
+                if (Directory.Exists(cache)) {
+                    var f = Directory.GetFiles(cache, "catalog_*.bin");
+                    if (f.Length > 0) return Path.GetFileNameWithoutExtension(f[0]);
+                }
+            } catch {}
+            return "catalog";
+        }
+
+        // 只改写【用户缓存】catalog；安装目录的 catalog.bin / catalog.hash 一律不动（动了会触发反作弊“未知的文件版本”）
         private void ApplyCatalogRedirect(string root) {
             string masterBin = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\catalog.bin");
             string masterHash = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\catalog.hash");
-            string masterBak = masterBin + ".bak";
-
-            if (!File.Exists(masterBin)) {
-                throw new FileNotFoundException("找不到主 catalog.bin: " + masterBin);
-            }
-
-            if (!File.Exists(masterBak)) {
-                File.Copy(masterBin, masterBak, true);
-                AppendLog("-> 已备份官方原版 catalog: " + Path.GetFileName(masterBak));
-            }
-
-            byte[] data = File.ReadAllBytes(masterBak);
-            Encoding ascii = Encoding.ASCII;
-            foreach (var n in Zh0Names) {
-                string z = n.Replace("_all.bundle", "_zh0.bundle");
-                data = ReplaceBytes(data, ascii.GetBytes(n), ascii.GetBytes(z));
-            }
-
-            File.WriteAllBytes(masterBin, data);
-            AppendLog("-> 已更新主目录 catalog.bin (成功重定向 8 个汉化资源包)");
+            if (!File.Exists(masterBin)) throw new FileNotFoundException("找不到主 catalog.bin: " + masterBin);
 
             string cache = GetCacheDir();
-            try {
-                if (!Directory.Exists(cache)) Directory.CreateDirectory(cache);
+            if (!Directory.Exists(cache)) Directory.CreateDirectory(cache);
+            string catName = GetCatalogName(root);
+            string cacheBin = Path.Combine(cache, catName + ".bin");
+            string cacheHash = Path.Combine(cache, catName + ".hash");
 
-                var targets = new List<string>();
-                string aaDir = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\StandaloneWindows64");
-                if (Directory.Exists(aaDir)) {
-                    foreach (var f in Directory.GetFiles(aaDir, "catalog_*.bin")) {
-                        targets.Add(Path.Combine(cache, Path.GetFileName(f)));
-                    }
-                }
-                foreach (var f in Directory.GetFiles(cache, "catalog_*.bin")) {
-                    if (!targets.Contains(f)) targets.Add(f);
-                }
-                targets.Add(Path.Combine(cache, "catalog.bin"));
-
-                foreach (var t in targets) {
-                    File.WriteAllBytes(t, data);
-                    string ht = Path.ChangeExtension(t, ".hash");
-                    if (File.Exists(masterHash)) File.Copy(masterHash, ht, true);
-                    AppendLog("-> 已同步缓存 catalog: " + Path.GetFileName(t));
-                }
-            } catch (Exception ex) {
-                AppendLog("【提示】同步缓存目录时出现非致命提示: " + ex.Message);
+            byte[] data = File.ReadAllBytes(masterBin);
+            Encoding ascii = Encoding.ASCII;
+            int hits = 0;
+            foreach (var n in Zh0Names) {
+                string z = n.Replace("_all.bundle", "_zh0.bundle");
+                byte[] find = ascii.GetBytes(n), repl = ascii.GetBytes(z);
+                if (find.Length != repl.Length) continue;
+                if (ascii.GetString(data).Contains(n)) { data = ReplaceBytes(data, find, repl); hits++; }
             }
+            File.WriteAllBytes(cacheBin, data);
+            if (File.Exists(masterHash)) File.Copy(masterHash, cacheHash, true);
+            AppendLog("-> 已改写用户缓存 catalog (" + catName + ")，重定向 " + hits + "/8 个资源包；安装目录文件未改动");
         }
 
         private void ExecuteInstall(string langCode, string langTitle, string sourceDir) {
@@ -707,17 +709,20 @@ namespace RobRunCN {
                     }
 
                     string masterBin = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\catalog.bin");
-                    string masterBak = masterBin + ".bak";
-                    if (File.Exists(masterBak)) {
-                        File.Copy(masterBak, masterBin, true);
-                        AppendLog("  已还原官方主 catalog.bin");
-                    }
-
+                    string masterHash = Path.Combine(root, @"ROB RUN_Data\StreamingAssets\aa\catalog.hash");
                     string cache = GetCacheDir();
                     if (Directory.Exists(cache)) {
                         try {
-                            Directory.Delete(cache, true);
-                            AppendLog("  已清理运行时缓存");
+                            string catName = GetCatalogName(root);
+                            string cacheBin = Path.Combine(cache, catName + ".bin");
+                            if (File.Exists(masterBin) && File.Exists(cacheBin)) {
+                                File.Copy(masterBin, cacheBin, true);
+                                AppendLog("  已把用户缓存 catalog 还原为官方版本");
+                            }
+                            string cacheHash = Path.Combine(cache, catName + ".hash");
+                            if (File.Exists(masterHash) && File.Exists(cacheHash)) {
+                                File.Copy(masterHash, cacheHash, true);
+                            }
                         } catch {}
                     }
 

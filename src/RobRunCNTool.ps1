@@ -1,4 +1,4 @@
-
+﻿
 # -*- coding: utf-8 -*-
 # ROB RUN 简繁双语一键汉化与还原工具 v1.3
 # 制作: B站@吃素的佩奇 (https://space.bilibili.com/3379443)
@@ -107,51 +107,51 @@ function Replace-Bytes([byte[]]$data, [byte[]]$find, [byte[]]$repl) {
     return ,$out.ToArray()
 }
 
+function Get-CatalogName([string]$g) {
+    $settings = Join-Path $g 'ROB RUN_Data\StreamingAssets\aa\settings.json'
+    if (Test-Path $settings) {
+        $txt = [System.IO.File]::ReadAllText($settings, [System.Text.Encoding]::UTF8)
+        $m = [regex]::Matches($txt, 'catalog_[0-9][0-9\.]+')
+        if ($m.Count -gt 0) {
+            $cand = @($m | ForEach-Object { $_.Value.TrimEnd('.') } | Where-Object { ($_.ToCharArray() | Where-Object { $_ -eq '.' }).Count -ge 3 } | Sort-Object Length -Descending)
+            if ($cand.Count -gt 0) { return $cand[0] }
+        }
+    }
+    $cache = Get-CacheDir
+    if (Test-Path $cache) {
+        $f = Get-ChildItem -LiteralPath $cache -Filter 'catalog_*.bin' -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($f) { return [System.IO.Path]::GetFileNameWithoutExtension($f.Name) }
+    }
+    return 'catalog'
+}
+
+# 关键：只改写【用户缓存】里的 catalog，安装目录的 catalog.bin / catalog.hash 一律不动（否则触发反作弊“未知的文件版本”）
 function Apply-CatalogRedirect([string]$g) {
     $masterBin  = Join-Path $g 'ROB RUN_Data\StreamingAssets\aa\catalog.bin'
     $masterHash = Join-Path $g 'ROB RUN_Data\StreamingAssets\aa\catalog.hash'
-    $masterBak  = $masterBin + '.bak'
+    if (-not (Test-Path $masterBin)) { throw ('找不到主 catalog.bin: ' + $masterBin) }
 
-    if (-not (Test-Path $masterBin)) { throw ("找不到主 catalog.bin: " + $masterBin) }
+    $cache = Get-CacheDir
+    if (-not (Test-Path $cache)) { New-Item -ItemType Directory -Path $cache -Force | Out-Null }
+    $catName = Get-CatalogName $g
+    $cacheBin  = Join-Path $cache ($catName + '.bin')
+    $cacheHash = Join-Path $cache ($catName + '.hash')
 
-    if (-not (Test-Path $masterBak)) {
-        Copy-Item -LiteralPath $masterBin -Destination $masterBak -Force
-        Write-Log "已备份官方原版 catalog -> catalog.bin.bak" "Cyan"
-    }
-
-    [byte[]]$data = [System.IO.File]::ReadAllBytes($masterBak)
+    [byte[]]$data = [System.IO.File]::ReadAllBytes($masterBin)
     $enc = [System.Text.Encoding]::ASCII
+    $hits = 0
     foreach ($n in $Zh0Names) {
         $z = $n.Replace('_all.bundle', '_zh0.bundle')
         [byte[]]$find = $enc.GetBytes($n)
         [byte[]]$repl = $enc.GetBytes($z)
-        $data = Replace-Bytes $data $find $repl
-    }
-
-    [System.IO.File]::WriteAllBytes($masterBin, $data)
-    Write-Log "已更新主目录 catalog.bin（成功重定向 8 个汉化资源包）" "Green"
-
-    $cache = Get-CacheDir
-    if (-not (Test-Path $cache)) { New-Item -ItemType Directory -Path $cache -Force | Out-Null }
-
-    $targets = @()
-    $aa = Join-Path $g 'ROB RUN_Data\StreamingAssets\aa\StandaloneWindows64'
-    if (Test-Path $aa) {
-        foreach ($f in (Get-ChildItem -LiteralPath $aa -Filter 'catalog_*.bin' -ErrorAction SilentlyContinue)) {
-            $targets += (Join-Path $cache $f.Name)
+        if ($find.Length -eq $repl.Length) {
+            $before = [System.Text.Encoding]::ASCII.GetString($data)
+            if ($before.Contains($n)) { $data = Replace-Bytes $data $find $repl; $hits++ }
         }
     }
-    foreach ($f in (Get-ChildItem -LiteralPath $cache -Filter 'catalog_*.bin' -ErrorAction SilentlyContinue)) {
-        if (-not ($targets -contains $f.FullName)) { $targets += $f.FullName }
-    }
-    $targets += (Join-Path $cache 'catalog.bin')
-
-    foreach ($t in ($targets | Select-Object -Unique)) {
-        [System.IO.File]::WriteAllBytes($t, $data)
-        $ht = [System.IO.Path]::ChangeExtension($t, '.hash')
-        if (Test-Path $masterHash) { Copy-Item -LiteralPath $masterHash -Destination $ht -Force }
-        Write-Log ("已同步运行时缓存 catalog: " + [System.IO.Path]::GetFileName($t)) "Gray"
-    }
+    [System.IO.File]::WriteAllBytes($cacheBin, $data)
+    if (Test-Path $masterHash) { Copy-Item -LiteralPath $masterHash -Destination $cacheHash -Force }
+    Write-Log ('已改写用户缓存 catalog (' + $catName + ')，重定向 ' + $hits + '/8 个资源包；安装目录文件未改动') 'Green'
 }
 
 function Ensure-GameClosed {
@@ -350,15 +350,20 @@ if ($Install -or $Restore) {
             }
         }
         $masterBin = Join-Path $game 'ROB RUN_Data\StreamingAssets\aa\catalog.bin'
-        $masterBak = $masterBin + '.bak'
-        if (Test-Path $masterBak) {
-            Copy-Item -LiteralPath $masterBak -Destination $masterBin -Force
-            Write-Log "已还原官方主 catalog.bin" "Green"
-        }
+        $masterHash = Join-Path $game 'ROB RUN_Data\StreamingAssets\aa\catalog.hash'
+        # 恢复用户缓存 catalog 为官方版本（不改安装目录文件）
         $cache = Get-CacheDir
         if (Test-Path $cache) {
-            Remove-Item -LiteralPath $cache -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Log "已清理运行时缓存" "Gray"
+            $catName = Get-CatalogName $game
+            $cacheBin = Join-Path $cache ($catName + '.bin')
+            if ((Test-Path $masterBin) -and (Test-Path $cacheBin)) {
+                Copy-Item -LiteralPath $masterBin -Destination $cacheBin -Force
+                Write-Log '已把用户缓存 catalog 还原为官方版本' 'Green'
+            }
+            $cacheHash = Join-Path $cache ($catName + '.hash')
+            if ((Test-Path $masterHash) -and (Test-Path $cacheHash)) {
+                Copy-Item -LiteralPath $masterHash -Destination $cacheHash -Force
+            }
         }
         Write-Host ""
         Write-Host "【成功】已完全还原官方原版英文！直接启动游戏即可。" -ForegroundColor Green
