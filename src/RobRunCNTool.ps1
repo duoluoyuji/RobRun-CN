@@ -1,6 +1,6 @@
-﻿
+
 # -*- coding: utf-8 -*-
-# ROB RUN 简繁双语一键汉化与还原工具 v1.2
+# ROB RUN 简繁双语一键汉化与还原工具 v1.3
 # 制作: B站@吃素的佩奇 (https://space.bilibili.com/3379443)
 
 param(
@@ -325,7 +325,7 @@ function Show-Disclaimer {
 # ================= 命令行模式 =================
 if ($Install -or $Restore) {
     Write-Host "==========================================================" -ForegroundColor Cyan
-    Write-Host "       ROB RUN 简繁双语一键汉化工具 v1.2" -ForegroundColor Cyan
+    Write-Host "       ROB RUN 简繁双语一键汉化工具 v1.3" -ForegroundColor Cyan
     Write-Host "       制作团队: B站@吃素的佩奇" -ForegroundColor Magenta
     Write-Host "       主页: https://space.bilibili.com/3379443" -ForegroundColor Gray
     Write-Host "==========================================================" -ForegroundColor Cyan

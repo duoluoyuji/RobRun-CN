@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # ROB RUN 汉化一键诊断工具（只读，不修改任何文件）
 # 输出：同目录下 ROB_RUN_汉化诊断_时间.txt
 
@@ -13,7 +13,7 @@ $script:rep = New-Object System.Collections.Generic.List[string]
 function Log-Line([string]$s) { $script:rep.Add($s); Write-Host $s }
 
 Log-Line "=========================================================="
-Log-Line ("  ROB RUN 简繁双语汉化一键诊断报告 v1.2 (" + $stamp + ")")
+Log-Line ("  ROB RUN 简繁双语汉化一键诊断报告 v1.3 (" + $stamp + ")")
 Log-Line "=========================================================="
 Log-Line ""
 

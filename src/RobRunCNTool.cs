@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -18,8 +20,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCopyright("Copyright © 2026 B站@吃素的佩奇")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace RobRunCN {
     public class ClientTarget {
@@ -38,6 +40,7 @@ namespace RobRunCN {
         private Label lblTitle;
         private Label lblSubTitle;
         private Button btnBili;
+        private Label lblUpdate;
 
         private GroupBox grpClients;
         private CheckedListBox chkListClients;
@@ -58,7 +61,7 @@ namespace RobRunCN {
         private string toolDir;
         private string zhDir;
         private string zhTwDir;
-        private string currentVersion = "1.2";
+        private string currentVersion = "1.3";
 
         private static readonly string[] Zh0Names = new string[] {
             "inbuild_assets_all.bundle",
@@ -111,6 +114,19 @@ namespace RobRunCN {
             lblSubTitle.Location = new Point(22, 45);
             lblSubTitle.AutoSize = true;
 
+            lblUpdate = new Label();
+            lblUpdate.Text = "";
+            lblUpdate.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+            lblUpdate.ForeColor = Color.FromArgb(220, 120, 0);
+            lblUpdate.Location = new Point(300, 22);
+            lblUpdate.Size = new Size(285, 32);
+            lblUpdate.TextAlign = ContentAlignment.MiddleLeft;
+            lblUpdate.Cursor = Cursors.Hand;
+            lblUpdate.Visible = false;
+            lblUpdate.Click += (s, e) => {
+                try { Process.Start("https://github.com/duoluoyuji/RobRun-CN/releases/latest"); } catch {}
+            };
+
             btnBili = new Button();
             btnBili.Text = "关注作者B站";
             btnBili.Location = new Point(595, 18);
@@ -127,6 +143,7 @@ namespace RobRunCN {
 
             topPanel.Controls.Add(lblTitle);
             topPanel.Controls.Add(lblSubTitle);
+            topPanel.Controls.Add(lblUpdate);
             topPanel.Controls.Add(btnBili);
             this.Controls.Add(topPanel);
 
@@ -281,7 +298,58 @@ namespace RobRunCN {
                 AppendLog("  ROB RUN 简繁双语一键汉化工具 v" + currentVersion + " 已就绪");
                 AppendLog("==========================================================");
                 RunScan();
+                CheckUpdateAsync();
             };
+        }
+
+        // ================= 更新检查（v1.3 新增）=================
+        private const string UpdateCheckUrl = "https://raw.githubusercontent.com/duoluoyuji/RobRun-CN/main/version.json";
+
+        private static int[] ParseVersion(string v) {
+            if (string.IsNullOrEmpty(v)) return new int[0];
+            string[] parts = v.Trim().TrimStart('v', 'V').Split('.');
+            int[] nums = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++) {
+                int n;
+                if (!int.TryParse(parts[i], out n)) n = 0;
+                nums[i] = n;
+            }
+            return nums;
+        }
+
+        private static bool IsNewer(string remote, string local) {
+            int[] r = ParseVersion(remote), l = ParseVersion(local);
+            int len = Math.Max(r.Length, l.Length);
+            for (int i = 0; i < len; i++) {
+                int a = i < r.Length ? r[i] : 0;
+                int b = i < l.Length ? l[i] : 0;
+                if (a != b) return a > b;
+            }
+            return false;
+        }
+
+        private void CheckUpdateAsync() {
+            ThreadPool.QueueUserWorkItem(delegate {
+                try {
+                    using (WebClient wc = new WebClient()) {
+                        wc.Encoding = System.Text.Encoding.UTF8;
+                        wc.Headers.Add("User-Agent", "RobRunCNTool/" + currentVersion);
+                        Task<string> t = wc.DownloadStringTaskAsync(new Uri(UpdateCheckUrl));
+                        if (!t.Wait(4000)) return;
+                        string body = t.Result;
+                        Match m = Regex.Match(body, "\"version\"\\s*:\\s*\"([^\"]+)\"");
+                        if (!m.Success) return;
+                        string remote = m.Groups[1].Value;
+                        if (IsNewer(remote, currentVersion)) {
+                            this.BeginInvoke(new Action(delegate {
+                                lblUpdate.Text = "发现新版本 v" + remote + "，点此下载";
+                                lblUpdate.Visible = true;
+                                AppendLog("发现新版本 v" + remote + "（当前 v" + currentVersion + "），可点击窗口右上角提示前往下载");
+                            }));
+                        }
+                    }
+                } catch { /* 网络不可用时静默忽略 */ }
+            });
         }
 
         private void AppendLog(string msg) {
